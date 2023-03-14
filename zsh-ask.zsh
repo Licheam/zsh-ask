@@ -193,30 +193,41 @@ function ask() {
         if $debug; then
             echo -E "$history"
         fi
-        local data='{"messages":['$history'], "model":"gpt-3.5-turbo", "stream":'$stream', "max_tokens":800}'
+        local data='{"messages":['$history'], "model":"gpt-3.5-turbo", "stream":'$stream', "max_tokens":'$tokens'}'
         echo -n "\033[0;36massistant: \033[0m"
         local message=""
         local generated_text=""
         if $stream; then
             local begin=true
-            curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d $data $api_url | while read tokens; do
-                if [ "$tokens" = "" ]; then
+            local token=""
+            curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d $data $api_url | while read token; do
+                if [ "$token" = "" ]; then
                     continue
                 fi
-                tokens=$(echo -E $tokens | sed 's/^data://')
-
+                if $debug; then
+                    echo $token
+                fi
+                token=$(echo -E $token | sed 's/^data://')
+                if $debug; then
+                    echo -E "$token"
+                fi
                 local delta_text=""
-                if ! delta_text=$(echo -E $tokens | jq -re '.choices[].delta.content') ; then
+                if delta_text=$(echo -E $token | jq -re '.choices[].delta.content'); then
                     if [ $begin ] && [ $delta_text = "nn" ]; then
                         begin=false
                         continue
+                    elif [[ $delta_text =~ nn$ ]]; then
+                        delta_text='\n\n'
+                    elif [[ $delta_text =~ [^a-zA-Z0-9]n$ ]]; then
+                        delta_text='\n'
                     fi
+                    begin=false
                     echo -n $delta_text
-                    generated_text="$generated_text$delta_text"
+                    generated_text=$generated_text$delta_text
                 fi
-                if ! echo -E $tokens | jq -re '.choices[].finish_reason' > /dev/null; then
+                if (echo -E $token | jq -re '.choices[].finish_reason' > /dev/null); then
                     echo ""
-                    break;
+                    break
                 fi
             done
             message='{"role":"assistant", "content":"'"$generated_text"'"}'
@@ -238,6 +249,8 @@ function ask() {
             break
         fi
         echo -n "\033[0;32muser: \033[0m"
-        read input
+        if ! read input; then
+            break
+        fi
     done
 }
