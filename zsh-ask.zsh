@@ -25,12 +25,16 @@ typeset -g ZSH_ASK_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 # Default configurations
 (( ! ${+ZSH_ASK_CONVERSATION} )) &&
 typeset -g ZSH_ASK_CONVERSATION=false
+(( ! ${+ZSH_ASK_INHERITS} )) &&
+typeset -g ZSH_ASK_INHERITS=false
 (( ! ${+ZSH_ASK_MARKDOWN} )) &&
 typeset -g ZSH_ASK_MARKDOWN=false
 (( ! ${+ZSH_ASK_STREAM} )) &&
 typeset -g ZSH_ASK_STREAM=false
 (( ! ${+ZSH_ASK_TOKENS} )) &&
 typeset -g ZSH_ASK_TOKENS=800
+(( ! ${+ZSH_ASK_HISTORY} )) &&
+typeset -g ZSH_ASK_HISTORY=""
 
 function _zsh_ask_show_help() {
   echo "A lightweight Zsh plugin serves as a ChatGPT API frontend, enabling you to interact with ChatGPT directly from the Zsh."
@@ -39,6 +43,7 @@ function _zsh_ask_show_help() {
   echo "Options:"
   echo "  -h                Display this help message."
   echo "  -v                Display the version number."
+  echo "  -i                Inherits conversation from last chat."
   echo "  -c                Enable conversation."
   echo "  -f <path_to_file> Enable file as query suffix."
   echo "  -m                Enable markdown rendering (glow required)."
@@ -85,15 +90,17 @@ function ask() {
     local makrdown=$ZSH_ASK_MARKDOWN
     local stream=$ZSH_ASK_STREAM
     local tokens=$ZSH_ASK_TOKENS
+    local inherits=$ZSH_ASK_INHERITS
+    local history=""
+    
 
     local usefile=false
     local filepath=""
     local requirements=("curl" "jq")
     local debug=false
     local satisfied=true
-    local history=""
     local input=""
-    while getopts ":hvcdmsuUf:t:" opt; do
+    while getopts ":hvcdmsiuUf:t:" opt; do
         case $opt in
             h)
                 _zsh_ask_show_help
@@ -126,6 +133,9 @@ function ask() {
                 ;;
             d)
                 debug=true
+                ;;
+            i)
+                inherits=true
                 ;;
             t)
                 if ! [[ $OPTARG =~ ^[0-9]+$ ]]; then
@@ -177,8 +187,13 @@ function ask() {
         return 1
     fi
 
+    if $inherits; then
+        history=$ZSH_ASK_HISTORY
+    fi
+
     shift $((OPTIND-1))
-    input=$1
+
+    input=$*
 
     if $usefile; then
         input=$(echo "$input$(cat "$filepath")" | xargs echo)
@@ -245,6 +260,7 @@ function ask() {
             fi
         fi
         history=$history', '$message', '
+        ZSH_ASK_HISTORY=$history
         if ! $conversation; then
             break
         fi
