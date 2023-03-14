@@ -35,6 +35,10 @@ typeset -g ZSH_ASK_STREAM=false
 typeset -g ZSH_ASK_TOKENS=800
 (( ! ${+ZSH_ASK_HISTORY} )) &&
 typeset -g ZSH_ASK_HISTORY=""
+(( ! ${+ZSH_ASK_INITIALROLE} )) &&
+typeset -g ZSH_ASK_INITIALROLE="system"
+(( ! ${+ZSH_ASK_INITIALROLE} )) &&
+typeset -g ZSH_ASK_INITIALPROMPT="You are a large language model trained by OpenAI. Answer as concisely as possible.\nKnowledge cutoff: {knowledge_cutoff} Current date: {current_date}"
 
 function _zsh_ask_show_help() {
   echo "A lightweight Zsh plugin serves as a ChatGPT API frontend, enabling you to interact with ChatGPT directly from the Zsh."
@@ -189,6 +193,10 @@ function ask() {
 
     if $inherits; then
         history=$ZSH_ASK_HISTORY
+    fi
+    
+    if [ "$history" = "" ]; then
+        history='{"role":"'$ZSH_ASK_INITIALROLE'", "content":"'$ZSH_ASK_INITIALPROMPT'"}, '
     fi
 
     shift $((OPTIND-1))
