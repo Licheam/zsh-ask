@@ -1,5 +1,5 @@
 # A lightweight Zsh plugin serves as a ChatGPT API frontend, enabling you to interact with ChatGPT directly from the Zsh.
-# https://github.com/Michaelwmx/zsh-ask
+# https://github.com/Licheam/zsh-ask
 # Copyright (c) 2023 Leachim
 
 #--------------------------------------------------------------------#
@@ -7,12 +7,10 @@
 #--------------------------------------------------------------------#
 
 0=${(%):-%N}
-typeset -g ZSH_ASK_PATH=${0:A:h}
-typeset -g ZSH_ASK_VERSION=$(<"$ZSH_ASK_PATH"/VERSION)
-
+typeset -g ZSH_ASK_PREFIX=${0:A:h}
 
 (( ! ${+ZSH_ASK_REPO} )) &&
-typeset -g ZSH_ASK_REPO="Michaelwmx/zsh-ask"
+typeset -g ZSH_ASK_REPO="https://github.com/Licheam/zsh-ask"
 
 # Get the corresponding endpoint for your desired model.
 (( ! ${+ZSH_ASK_API_URL} )) &&
@@ -37,7 +35,7 @@ typeset -g ZSH_ASK_TOKENS=800
 typeset -g ZSH_ASK_HISTORY=""
 (( ! ${+ZSH_ASK_INITIALROLE} )) &&
 typeset -g ZSH_ASK_INITIALROLE="system"
-(( ! ${+ZSH_ASK_INITIALROLE} )) &&
+(( ! ${+ZSH_ASK_INITIALPROMPT} )) &&
 typeset -g ZSH_ASK_INITIALPROMPT="You are a large language model trained by OpenAI. Answer as concisely as possible.\nKnowledge cutoff: {knowledge_cutoff} Current date: {current_date}"
 
 function _zsh_ask_show_help() {
@@ -47,35 +45,19 @@ function _zsh_ask_show_help() {
   echo "Options:"
   echo "  -h                Display this help message."
   echo "  -v                Display the version number."
-  echo "  -i                Inherits conversation from last chat."
+  echo "  -i                Inherits conversation from ZSH_ASK_HISTORY."
   echo "  -c                Enable conversation."
-  echo "  -f <path_to_file> Enable file as query suffix."
+  echo "  -f <path_to_file> Enable file as query suffix (testing feature)."
   echo "  -m                Enable markdown rendering (glow required)."
-  echo "  -s                Enable streaming (Beta, just for chat)."
+  echo "  -s                Enable streaming (Doesn't work with -m yet)."
   echo "  -t <max_tokens>   Set max tokens to <max_tokens>, default sets to 800."
-  echo "  -u                Check for updates."
-  echo "  -U                Upgrade this plugin."
+  echo "  -u                Upgrade this plugin."
   echo "  -d                Print debug information."
 }
 
-function _zsh_ask_check_update() {
-  if local version=$(curl -s "https://raw.githubusercontent.com/$ZSH_ASK_REPO/master/VERSION") ; then
-    if [[ "$version" != "$ZSH_ASK_VERSION" ]]; then
-      echo "New version $version is available."
-      echo "Run 'ask -U' to upgrade."
-      return 0
-    else
-      echo "You are in the latest version."
-      return 0
-    fi
-  else
-    echo "Failed to check for updates."
-    return 1
-  fi
-}
-
 function _zsh_ask_upgrade() {
-  if git -C $ZSH_ASK_PATH pull; then
+  git -C $ZSH_ASK_PREFIX remote set-url origin $ZSH_ASK_REPO
+  if git -C $ZSH_ASK_PREFIX pull; then
     return 0
   else
     echo "Failed to upgrade."
@@ -84,7 +66,7 @@ function _zsh_ask_upgrade() {
 }
 
 function _zsh_ask_show_version() {
-  echo "$ZSH_ASK_VERSION"
+  cat "$ZSH_ASK_PREFIX/VERSION"
 }
 
 function ask() {
@@ -104,7 +86,7 @@ function ask() {
     local debug=false
     local satisfied=true
     local input=""
-    while getopts ":hvcdmsiuUf:t:" opt; do
+    while getopts ":hvcdmsiuf:t:" opt; do
         case $opt in
             h)
                 _zsh_ask_show_help
@@ -115,13 +97,6 @@ function ask() {
                 return 0
                 ;;
             u)
-                if _zsh_ask_check_update; then
-                    return 0
-                else
-                    return 1
-                fi
-                ;;
-            U)
                 if ! which "git" > /dev/null; then
                     echo "git is required for upgrade."
                     return 1
@@ -171,7 +146,6 @@ function ask() {
                 ;;
             s)
                 stream=true
-                echo "\033[0;33mWarning:\033[0m Enable streaming is a testing feature that should only be used in text-only dialogue."
                 ;;
             :)
                 echo "-$OPTARG needs a parameter"
@@ -204,10 +178,10 @@ function ask() {
     input=$*
 
     if $usefile; then
-        input=$(echo "$input$(cat "$filepath")" | xargs echo)
+        input="$input$(cat "$filepath")"
     elif [ "$input" = "" ]; then
         echo -n "\033[32muser: \033[0m"
-        read input
+        read -r input
     fi
 
 
@@ -223,29 +197,19 @@ function ask() {
         if $stream; then
             local begin=true
             local token=""
-            curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d $data $api_url | while read token; do
+            
+            curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d $data $api_url | while read -r token; do
                 if [ "$token" = "" ]; then
                     continue
                 fi
                 if $debug; then
-                    echo $token
+                    echo -E $token
                 fi
-                token=$(echo -E $token | sed 's/^data://')
-                if $debug; then
-                    echo -E "$token"
-                fi
+                token=${token:6}
                 local delta_text=""
                 if delta_text=$(echo -E $token | jq -re '.choices[].delta.content'); then
-                    if [ $begin ] && [ $delta_text = "nn" ]; then
-                        begin=false
-                        continue
-                    elif [[ $delta_text =~ nn$ ]]; then
-                        delta_text='\n\n'
-                    elif [[ $delta_text =~ [^a-zA-Z0-9]n$ ]]; then
-                        delta_text='\n'
-                    fi
                     begin=false
-                    echo -n $delta_text
+                    echo -E $token | jq -je '.choices[].delta.content'
                     generated_text=$generated_text$delta_text
                 fi
                 if (echo -E $token | jq -re '.choices[].finish_reason' > /dev/null); then
@@ -262,9 +226,9 @@ function ask() {
             message=$(echo -E $response | jq -r '.choices[].message');  
             generated_text=$(echo -E $message | jq -r '.content')
             if $makrdown; then
-                echo $generated_text | glow
+                echo -E $generated_text | glow
             else
-                echo $generated_text
+                echo -E $generated_text
             fi
         fi
         history=$history', '$message', '
@@ -273,7 +237,7 @@ function ask() {
             break
         fi
         echo -n "\033[0;32muser: \033[0m"
-        if ! read input; then
+        if ! read -r input; then
             break
         fi
     done
