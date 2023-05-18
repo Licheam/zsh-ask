@@ -58,6 +58,7 @@ function _zsh_ask_show_help() {
 function _zsh_ask_upgrade() {
   git -C $ZSH_ASK_PREFIX remote set-url origin $ZSH_ASK_REPO
   if git -C $ZSH_ASK_PREFIX pull; then
+    source $ZSH_ASK_PREFIX/zsh-ask.zsh
     return 0
   else
     echo "Failed to upgrade."
