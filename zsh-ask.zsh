@@ -21,6 +21,8 @@ typeset -g ZSH_ASK_API_URL="https://api.openai.com/v1/chat/completions"
 typeset -g ZSH_ASK_API_KEY="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 
 # Default configurations
+(( ! ${+ZSH_ASK_MODEL} )) &&
+typeset -g ZSH_ASK_MODEL="gpt-3.5-turbo"
 (( ! ${+ZSH_ASK_CONVERSATION} )) &&
 typeset -g ZSH_ASK_CONVERSATION=false
 (( ! ${+ZSH_ASK_INHERITS} )) &&
@@ -49,6 +51,8 @@ function _zsh_ask_show_help() {
   echo "  -c                Enable conversation."
   echo "  -f <path_to_file> Enable file as query suffix (testing feature)."
   echo "  -m                Enable markdown rendering (glow required)."
+  echo "  -M <openai_model> Set OpenAI model to <openai_model>, default sets to gpt-3.5-turbo."
+  echo "                    Models can be found at https://platform.openai.com/docs/models."
   echo "  -s                Enable streaming (Doesn't work with -m yet)."
   echo "  -t <max_tokens>   Set max tokens to <max_tokens>, default sets to 800."
   echo "  -u                Upgrade this plugin."
@@ -78,6 +82,7 @@ function ask() {
     local stream=$ZSH_ASK_STREAM
     local tokens=$ZSH_ASK_TOKENS
     local inherits=$ZSH_ASK_INHERITS
+    local model=$ZSH_ASK_MODEL
     local history=""
     
 
@@ -87,7 +92,7 @@ function ask() {
     local debug=false
     local satisfied=true
     local input=""
-    while getopts ":hvcdmsiuf:t:" opt; do
+    while getopts ":hvcdmsiuM:f:t:" opt; do
         case $opt in
             h)
                 _zsh_ask_show_help
@@ -137,6 +142,9 @@ function ask() {
                     fi
                     filepath=$OPTARG
                 fi
+                ;;
+            M)
+                model=$OPTARG
                 ;;
             m)
                 makrdown=true
@@ -191,7 +199,7 @@ function ask() {
         if $debug; then
             echo -E "$history"
         fi
-        local data='{"messages":['$history'], "model":"gpt-3.5-turbo", "stream":'$stream', "max_tokens":'$tokens'}'
+        local data='{"messages":['$history'], "model":"'$model'", "stream":'$stream', "max_tokens":'$tokens'}'
         echo -n "\033[0;36massistant: \033[0m"
         local message=""
         local generated_text=""
