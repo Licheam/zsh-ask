@@ -56,6 +56,7 @@ function _zsh_ask_show_help() {
   echo "  -s                Enable streaming (Doesn't work with -m yet)."
   echo "  -t <max_tokens>   Set max tokens to <max_tokens>, default sets to 800."
   echo "  -u                Upgrade this plugin."
+  echo "  -r                Print raw output."
   echo "  -d                Print debug information."
 }
 
@@ -92,7 +93,8 @@ function ask() {
     local debug=false
     local satisfied=true
     local input=""
-    while getopts ":hvcdmsiuM:f:t:" opt; do
+    local raw=false
+    while getopts ":hvcdmsiurM:f:t:" opt; do
         case $opt in
             h)
                 _zsh_ask_show_help
@@ -156,6 +158,9 @@ function ask() {
             s)
                 stream=true
                 ;;
+            r)
+                raw=true
+                ;;
             :)
                 echo "-$OPTARG needs a parameter"
                 return 1
@@ -200,7 +205,9 @@ function ask() {
             echo -E "$history"
         fi
         local data='{"messages":['$history'], "model":"'$model'", "stream":'$stream', "max_tokens":'$tokens'}'
-        echo -n "\033[0;36massistant: \033[0m"
+        if ! $raw; then
+          echo -n "\033[0;36massistant: \033[0m"
+        fi
         local message=""
         local generated_text=""
         if $stream; then
@@ -234,7 +241,9 @@ function ask() {
             fi
             message=$(echo -E $response | jq -r '.choices[].message');  
             generated_text=$(echo -E $message | jq -r '.content')
-            if $makrdown; then
+            if $raw; then
+                echo -E $response
+            elif $makrdown; then
                 echo -E $generated_text | glow
             else
                 echo -E $generated_text
