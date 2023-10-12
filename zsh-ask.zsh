@@ -56,6 +56,7 @@ function _zsh_ask_show_help() {
   echo "  -s                Enable streaming (Doesn't work with -m yet)."
   echo "  -t <max_tokens>   Set max tokens to <max_tokens>, default sets to 800."
   echo "  -u                Upgrade this plugin."
+  echo "  -r                Print raw output."
   echo "  -d                Print debug information."
 }
 
@@ -93,7 +94,7 @@ function ask() {
     local satisfied=true
     local input=""
     local raw=false
-    while getopts ":hvcdmsiuM:f:t:r" opt; do
+    while getopts ":hvcdmsiurM:f:t:" opt; do
         case $opt in
             h)
                 _zsh_ask_show_help
