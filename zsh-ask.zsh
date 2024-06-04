@@ -79,7 +79,7 @@ function ask() {
     local api_url=$ZSH_ASK_API_URL
     local api_key=$ZSH_ASK_API_KEY
     local conversation=$ZSH_ASK_CONVERSATION
-    local makrdown=$ZSH_ASK_MARKDOWN
+    local markdown=$ZSH_ASK_MARKDOWN
     local stream=$ZSH_ASK_STREAM
     local tokens=$ZSH_ASK_TOKENS
     local inherits=$ZSH_ASK_INHERITS
@@ -149,7 +149,7 @@ function ask() {
                 model=$OPTARG
                 ;;
             m)
-                makrdown=true
+                markdown=true
                 if ! which "glow" > /dev/null; then
                     echo "glow is required for markdown rendering."
                     satisfied=false
@@ -243,7 +243,7 @@ function ask() {
             generated_text=$(echo -E $message | jq -r '.content')
             if $raw; then
                 echo -E $response
-            elif $makrdown; then
+            elif $markdown; then
                 echo -E $generated_text | glow
             else
                 echo -E $generated_text
