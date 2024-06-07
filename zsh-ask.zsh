@@ -1,6 +1,6 @@
 # A lightweight Zsh plugin serves as a ChatGPT API frontend, enabling you to interact with ChatGPT directly from the Zsh.
 # https://github.com/Licheam/zsh-ask
-# Copyright (c) 2023 Leachim
+# Copyright (c) 2023-2024 Leachim
 
 #--------------------------------------------------------------------#
 # Global Configuration Variables                                     #
@@ -85,7 +85,6 @@ function ask() {
     local inherits=$ZSH_ASK_INHERITS
     local model=$ZSH_ASK_MODEL
     local history=""
-    
 
     local usefile=false
     local filepath=""
@@ -93,7 +92,7 @@ function ask() {
     local debug=false
     local satisfied=true
     local input=""
-    local raw=false
+    local assistant="assistant"
     while getopts ":hvcdmsiurM:f:t:" opt; do
         case $opt in
             h)
@@ -159,7 +158,7 @@ function ask() {
                 stream=true
                 ;;
             r)
-                raw=true
+                debug=true
                 ;;
             :)
                 echo "-$OPTARG needs a parameter"
@@ -171,13 +170,10 @@ function ask() {
     for i in "${requirements[@]}"
     do
     if ! which $i > /dev/null; then
-        echo "$i is required."
-        satisfied=false
-    fi
-    done
-    if ! $satisfied; then
+        echo "zsh-ask \033[0;31merror:\033[0m $i is required."
         return 1
     fi
+    done
 
     if $inherits; then
         history=$ZSH_ASK_HISTORY
@@ -205,9 +201,6 @@ function ask() {
             echo -E "$history"
         fi
         local data='{"messages":['$history'], "model":"'$model'", "stream":'$stream', "max_tokens":'$tokens'}'
-        if ! $raw; then
-          echo -n "\033[0;36massistant: \033[0m"
-        fi
         local message=""
         local generated_text=""
         if $stream; then
@@ -222,6 +215,10 @@ function ask() {
                     echo -E $token
                 fi
                 token=${token:6}
+                if delta_text=$(echo -E $token | jq -re '.choices[].delta.role'); then
+                    assistant=$(echo -E $token | jq -je '.choices[].delta.role')
+                    echo -n "\033[0;36m$assistant: \033[0m"
+                fi
                 local delta_text=""
                 if delta_text=$(echo -E $token | jq -re '.choices[].delta.content'); then
                     begin=false
@@ -233,17 +230,22 @@ function ask() {
                     break
                 fi
             done
-            message='{"role":"assistant", "content":"'"$generated_text"'"}'
+            message='{"role":"'"$assistant"'", "content":"'"$generated_text"'"}'
         else
             local response=$(curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d $data $api_url)
             if $debug; then
                 echo -E "$response"
             fi
-            message=$(echo -E $response | jq -r '.choices[].message');  
+            echo -n "\033[0;36m$assistant: \033[0m"
+            if echo -E $response | jq -e '.error' > /dev/null; then
+                echo "zsh-ask \033[0;31merror:\033[0m"
+                echo -E $response | jq -r '.error'
+                return 1
+            fi
+            assistant=$(echo -E $response | jq -r '.choices[].role')
+            message=$(echo -E $response | jq -r '.choices[].message')
             generated_text=$(echo -E $message | jq -r '.content')
-            if $raw; then
-                echo -E $response
-            elif $markdown; then
+            if $markdown; then
                 echo -E $generated_text | glow
             else
                 echo -E $generated_text
