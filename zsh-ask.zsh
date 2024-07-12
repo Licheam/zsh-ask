@@ -90,6 +90,7 @@ function ask() {
     local filepath=""
     local requirements=("curl" "jq")
     local debug=false
+    local raw=false
     local satisfied=true
     local input=""
     local assistant="assistant"
@@ -158,7 +159,7 @@ function ask() {
                 stream=true
                 ;;
             r)
-                debug=true
+                raw=true
                 ;;
             :)
                 echo "-$OPTARG needs a parameter"
@@ -189,7 +190,7 @@ function ask() {
 
     if $usefile; then
         input="$input$(cat "$filepath")"
-    elif [ "$input" = "" ]; then
+    elif ! $raw && [ "$input" = "" ]; then
         echo -n "\033[32muser: \033[0m"
         read -r input
     fi
@@ -211,44 +212,50 @@ function ask() {
                 if [ "$token" = "" ]; then
                     continue
                 fi
-                if $debug; then
+                if $debug || $raw; then
                     echo -E $token
                 fi
-                token=${token:6}
-                if delta_text=$(echo -E $token | jq -re '.choices[].delta.role'); then
-                    assistant=$(echo -E $token | jq -je '.choices[].delta.role')
-                    echo -n "\033[0;36m$assistant: \033[0m"
-                fi
-                local delta_text=""
-                if delta_text=$(echo -E $token | jq -re '.choices[].delta.content'); then
-                    begin=false
-                    echo -E $token | jq -je '.choices[].delta.content'
-                    generated_text=$generated_text$delta_text
-                fi
-                if (echo -E $token | jq -re '.choices[].finish_reason' > /dev/null); then
-                    echo ""
-                    break
+                if ! $raw; then
+                    token=${token:6}
+                    if ! $raw && delta_text=$(echo -E $token | jq -re '.choices[].delta.role'); then
+                        assistant=$(echo -E $token | jq -je '.choices[].delta.role')
+                        echo -n "\033[0;36m$assistant: \033[0m"
+                    fi
+                    local delta_text=""
+                    if delta_text=$(echo -E $token | jq -re '.choices[].delta.content'); then
+                        begin=false
+                        echo -E $token | jq -je '.choices[].delta.content'
+                        generated_text=$generated_text$delta_text
+                    fi
+                    if (echo -E $token | jq -re '.choices[].finish_reason' > /dev/null); then
+                        echo ""
+                        break
+                    fi
                 fi
             done
             message='{"role":"'"$assistant"'", "content":"'"$generated_text"'"}'
         else
             local response=$(curl -s -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $api_key" -d $data $api_url)
-            if $debug; then
+            if $debug || $raw; then
                 echo -E "$response"
             fi
-            echo -n "\033[0;36m$assistant: \033[0m"
-            if echo -E $response | jq -e '.error' > /dev/null; then
-                echo "zsh-ask \033[0;31merror:\033[0m"
-                echo -E $response | jq -r '.error'
-                return 1
+            if ! $raw; then
+                echo -n "\033[0;36m$assistant: \033[0m"
+                if echo -E $response | jq -e '.error' > /dev/null; then
+                    echo "zsh-ask \033[0;31merror:\033[0m"
+                    echo -E $response | jq -r '.error'
+                    return 1
+                fi
             fi
             assistant=$(echo -E $response | jq -r '.choices[].role')
             message=$(echo -E $response | jq -r '.choices[].message')
             generated_text=$(echo -E $message | jq -r '.content')
-            if $markdown; then
-                echo -E $generated_text | glow
-            else
-                echo -E $generated_text
+            if ! $raw; then
+                if $markdown; then
+                    echo -E $generated_text | glow
+                else
+                    echo -E $generated_text
+                fi
             fi
         fi
         history=$history', '$message', '
